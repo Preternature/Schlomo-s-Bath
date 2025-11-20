@@ -14,8 +14,15 @@ public:
     //==============================================================================
     void paint (juce::Graphics&) override;
     void resized() override;
+    void mouseDoubleClick (const juce::MouseEvent& event) override;
 
 private:
+    void toggleFullscreen();
+
+    bool isFullscreen = false;
+    int previousWidth = 800;
+    int previousHeight = 600;
+
     SchlomosBathAudioProcessor& audioProcessor;
 
     // UI Components
@@ -28,8 +35,10 @@ private:
 
     // Parameter sliders with labels
     // Category 1: Human Vocal Randomizers
-    juce::Label pitchDriftLabel{"", "U-Bend Shift"};
+    juce::Label pitchDriftLabel{"", "U-Bend (0-100 cents)"};
     juce::Slider pitchDriftSlider;
+    juce::Label lfoSpeedLabel{"", "U-Bend LFO Speed"};
+    juce::Slider lfoSpeedSlider;
     juce::Label formantLabel{"", "Formant Wobble"};
     juce::Slider formantSlider;
     juce::Label breathLabel{"", "Breath Noise"};

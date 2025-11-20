@@ -1,6 +1,8 @@
 #pragma once
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
+#include <rubberband/RubberBandLiveShifter.h>
+#include <memory>
 
 //==============================================================================
 // Base class for all vocal processing modules
@@ -62,17 +64,32 @@ public:
         AnxietyMode
     };
 
-    void setBehaviorMode(BehaviorMode mode) { behaviorMode = mode; }
     void setIntensity(float intensity) { this->intensity = juce::jlimit(0.0f, 1.0f, intensity); }
+    void setLFOSpeed(float speed) { lfoSpeed = juce::jlimit(0.0f, 1.0f, speed); }
 
 private:
-    BehaviorMode behaviorMode = VowelGlides;
-    float intensity = 0.0f;
+    float intensity = 0.0f;  // 0-1 maps to 0-100 cents range
+    float lfoSpeed = 0.3f;   // LFO speed (0.1 Hz to 5 Hz)
 
-    // Pitch shifting engine
-    juce::dsp::DelayLine<float> delayLine{44100};
-    std::vector<float> pitchEnvelope;
-    float currentPitchOffset = 0.0f;
+    // LFO state
+    float lfoPhase = 0.0f;
+    bool wasPositive = true;  // Track LFO zero crossings
+
+    // Pitch state
+    float currentCents = 0.0f;   // Current detuning in cents
+    float targetCents = 0.0f;    // Target detuning (picked at LFO peaks/valleys)
+
+    // RubberBand pitch shifter (one per channel for stereo)
+    std::vector<std::unique_ptr<RubberBand::RubberBandLiveShifter>> shifters;
+    std::vector<std::vector<float>> inputBuffers;
+    std::vector<std::vector<float>> outputBuffers;
+    std::vector<std::vector<float>> outputFIFOs;  // FIFO for output samples
+    std::vector<size_t> inputPos;   // Write position in input buffer
+    std::vector<size_t> outputPos;  // Read position in output FIFO
+    std::vector<size_t> outputAvailable;  // Samples available in output FIFO
+    size_t rbBlockSize = 0;
+    int numChannels = 0;
+
     juce::Random random;
 };
 

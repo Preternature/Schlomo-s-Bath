@@ -65,6 +65,12 @@ SchlomosBathAudioProcessorEditor::SchlomosBathAudioProcessorEditor (SchlomosBath
         audioProcessor.getVocalProcessor().getPitchDriftBrain().setIntensity((float)pitchDriftSlider.getValue());
     };
 
+    setupSlider(lfoSpeedSlider, lfoSpeedLabel);
+    lfoSpeedSlider.setValue(0.3);  // Default to moderate speed
+    lfoSpeedSlider.onValueChange = [this] {
+        audioProcessor.getVocalProcessor().getPitchDriftBrain().setLFOSpeed((float)lfoSpeedSlider.getValue());
+    };
+
     setupSlider(formantSlider, formantLabel);
     formantSlider.onValueChange = [this] {
         audioProcessor.getVocalProcessor().getFormantWhispers().setMouthWobble((float)formantSlider.getValue());
@@ -183,6 +189,9 @@ void SchlomosBathAudioProcessorEditor::resized()
 
     pitchDriftLabel.setBounds(col1.removeFromTop(20));
     pitchDriftSlider.setBounds(col1.removeFromTop(25));
+
+    lfoSpeedLabel.setBounds(col1.removeFromTop(20));
+    lfoSpeedSlider.setBounds(col1.removeFromTop(25));
     col1.removeFromTop(5);
 
     formantLabel.setBounds(col1.removeFromTop(20));
@@ -226,4 +235,46 @@ void SchlomosBathAudioProcessorEditor::resized()
     auto mixArea = area.removeFromTop(100).withSizeKeepingCentre(150, 100);
     masterMixLabel.setBounds(mixArea.removeFromTop(20));
     masterMixSlider.setBounds(mixArea);
+}
+
+void SchlomosBathAudioProcessorEditor::mouseDoubleClick(const juce::MouseEvent& event)
+{
+    // Check if double-click was in the title banner area (top 80 pixels)
+    if (event.y < 80)
+    {
+        toggleFullscreen();
+    }
+}
+
+void SchlomosBathAudioProcessorEditor::toggleFullscreen()
+{
+    if (isFullscreen)
+    {
+        // Restore previous size
+        setSize(previousWidth, previousHeight);
+        isFullscreen = false;
+    }
+    else
+    {
+        // Save current size
+        previousWidth = getWidth();
+        previousHeight = getHeight();
+
+        // Get screen bounds and set to max allowed size
+        auto display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay();
+        if (display != nullptr)
+        {
+            auto screenBounds = display->userArea;
+            // Use the resize limits we set (max 3840x2160)
+            int maxWidth = juce::jmin(screenBounds.getWidth(), 3840);
+            int maxHeight = juce::jmin(screenBounds.getHeight(), 2160);
+            setSize(maxWidth, maxHeight);
+        }
+        else
+        {
+            // Fallback to our max limits
+            setSize(3840, 2160);
+        }
+        isFullscreen = true;
+    }
 }

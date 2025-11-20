@@ -11,67 +11,156 @@ void PitchDriftBrain::prepare(double sampleRate, int samplesPerBlock)
 {
     currentSampleRate = sampleRate;
     currentBlockSize = samplesPerBlock;
-    delayLine.prepare({sampleRate, (juce::uint32)samplesPerBlock, 1});
-    delayLine.reset();
+    numChannels = 2;  // Prepare for stereo
+
+    // Clear existing shifters
+    shifters.clear();
+    inputBuffers.clear();
+    outputBuffers.clear();
+    outputFIFOs.clear();
+    inputPos.clear();
+    outputPos.clear();
+    outputAvailable.clear();
+
+    // Create one RubberBand shifter per channel
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
+        shifters.push_back(std::make_unique<RubberBand::RubberBandLiveShifter>(
+            (size_t)sampleRate,
+            1,  // mono per channel
+            RubberBand::RubberBandLiveShifter::OptionWindowShort
+        ));
+    }
+
+    rbBlockSize = shifters[0]->getBlockSize();
+
+    // Allocate buffers for each channel
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
+        inputBuffers.push_back(std::vector<float>(rbBlockSize, 0.0f));
+        outputBuffers.push_back(std::vector<float>(rbBlockSize, 0.0f));
+        // FIFO needs to hold at least 2 blocks worth of samples
+        outputFIFOs.push_back(std::vector<float>(rbBlockSize * 4, 0.0f));
+        inputPos.push_back(0);
+        outputPos.push_back(0);
+        outputAvailable.push_back(0);
+    }
 }
 
 void PitchDriftBrain::process(juce::AudioBuffer<float>& buffer)
 {
     // Skip entirely if intensity is 0 (no pitch randomization)
-    if (!enabled || intensity <= 0.0f)
+    if (!enabled || intensity <= 0.0f || shifters.empty())
         return;
 
     const int numSamples = buffer.getNumSamples();
+    const int bufferChannels = buffer.getNumChannels();
 
-    // intensity = 0 to 1, maps to 0 to 100 cents of random pitch deviation
-    // 100 cents = 1 semitone
+    // intensity = 0 to 1, maps to 0 to 100 cents range
     float maxCents = intensity * 100.0f;
 
-    for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+    // LFO frequency: lfoSpeed 0-1 maps to 0.1 Hz to 5 Hz
+    float lfoFreqHz = 0.1f + lfoSpeed * 4.9f;
+    float lfoIncrement = lfoFreqHz / (float)currentSampleRate;
+
+    // Update LFO and pitch target once per buffer (block rate)
+    for (int i = 0; i < numSamples; ++i)
+    {
+        lfoPhase += lfoIncrement;
+        if (lfoPhase >= 1.0f)
+            lfoPhase -= 1.0f;
+
+        float lfoValue = std::sin(lfoPhase * juce::MathConstants<float>::twoPi);
+        bool isPositive = lfoValue >= 0.0f;
+        if (isPositive != wasPositive)
+        {
+            targetCents = (random.nextFloat() * 2.0f - 1.0f) * maxCents;
+            wasPositive = isPositive;
+        }
+        currentCents = currentCents * 0.999f + targetCents * 0.001f;
+    }
+
+    // Convert cents to pitch scale: scale = 2^(cents/1200)
+    double pitchScale = std::pow(2.0, currentCents / 1200.0);
+
+    // Process each channel independently
+    for (int channel = 0; channel < bufferChannels && channel < numChannels; ++channel)
     {
         auto* channelData = buffer.getWritePointer(channel);
+        auto& shifter = shifters[channel];
+        auto& inputBuf = inputBuffers[channel];
+        auto& outputBuf = outputBuffers[channel];
+        auto& outputFIFO = outputFIFOs[channel];
+        size_t& inPos = inputPos[channel];
+        size_t& outPos = outputPos[channel];
+        size_t& outAvail = outputAvailable[channel];
+
+        shifter->setPitchScale(pitchScale);
 
         for (int sample = 0; sample < numSamples; ++sample)
         {
-            float input = channelData[sample];
+            // Add input sample to buffer
+            inputBuf[inPos] = channelData[sample];
+            inPos++;
 
-            // Push to delay line
-            delayLine.pushSample(0, input);
-
-            // Update pitch target periodically (smooth random walk)
-            if (sample % 256 == 0)
+            // When input buffer is full, process with RubberBand
+            if (inPos >= rbBlockSize)
             {
-                // Random cents within range [-maxCents, +maxCents]
-                float targetCents = (random.nextFloat() * 2.0f - 1.0f) * maxCents;
+                const float* inPtr = inputBuf.data();
+                float* outPtr = outputBuf.data();
+                shifter->shift(&inPtr, &outPtr);
 
-                // Convert cents to delay modulation
-                // Pitch ratio = 2^(cents/1200)
-                // For small cents, we approximate with delay modulation
-                // More cents = more delay variation needed
-                float targetDelaySamples = targetCents * (float)currentSampleRate / 12000.0f;
+                // Copy output to FIFO
+                size_t fifoSize = outputFIFO.size();
+                size_t writePos = (outPos + outAvail) % fifoSize;
+                for (size_t i = 0; i < rbBlockSize; ++i)
+                {
+                    outputFIFO[(writePos + i) % fifoSize] = outputBuf[i];
+                }
+                outAvail += rbBlockSize;
 
-                // Smooth transition to target
-                currentPitchOffset = currentPitchOffset * 0.95f + targetDelaySamples * 0.05f;
+                inPos = 0;
             }
 
-            // Base delay keeps signal in sync, offset creates pitch variation
-            float baseDelay = 512.0f;
-            float pitchDelay = baseDelay + currentPitchOffset;
-            pitchDelay = juce::jmax(1.0f, pitchDelay);
-
-            // Get pitch-shifted sample
-            float pitchedSample = delayLine.popSample(0, pitchDelay);
-
-            // Replace signal with pitch-shifted version
-            channelData[sample] = pitchedSample;
+            // Read from output FIFO if samples are available
+            if (outAvail > 0)
+            {
+                channelData[sample] = outputFIFO[outPos];
+                outPos = (outPos + 1) % outputFIFO.size();
+                outAvail--;
+            }
+            // If no output available yet (initial latency), pass through or output silence
+            // We'll pass through the input to avoid silence during startup
         }
     }
 }
 
 void PitchDriftBrain::reset()
 {
-    delayLine.reset();
-    currentPitchOffset = 0.0f;
+    for (auto& shifter : shifters)
+    {
+        if (shifter)
+            shifter->reset();
+    }
+
+    for (auto& buf : inputBuffers)
+        std::fill(buf.begin(), buf.end(), 0.0f);
+    for (auto& buf : outputBuffers)
+        std::fill(buf.begin(), buf.end(), 0.0f);
+    for (auto& fifo : outputFIFOs)
+        std::fill(fifo.begin(), fifo.end(), 0.0f);
+
+    for (size_t i = 0; i < inputPos.size(); ++i)
+    {
+        inputPos[i] = 0;
+        outputPos[i] = 0;
+        outputAvailable[i] = 0;
+    }
+
+    lfoPhase = 0.0f;
+    currentCents = 0.0f;
+    targetCents = 0.0f;
+    wasPositive = true;
 }
 
 //==============================================================================

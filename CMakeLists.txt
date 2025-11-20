@@ -43,6 +43,15 @@ target_sources(SchlomosBath
         Source/PluginProcessor.cpp
         Source/PluginEditor.cpp
         Source/VocalProcessor.cpp
+        libs/rubberband/single/RubberBandSingle.cpp
+)
+
+# RubberBand configuration
+target_compile_definitions(SchlomosBath
+    PRIVATE
+        USE_KISSFFT=1
+        USE_BUILTIN_FFT=1
+        NOMINMAX
 )
 
 # Link JUCE modules
@@ -80,4 +89,5 @@ target_compile_definitions(SchlomosBath
 target_include_directories(SchlomosBath
     PRIVATE
         Source
+        libs/rubberband
 )
