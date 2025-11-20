@@ -64,16 +64,20 @@ public:
         AnxietyMode
     };
 
-    void setIntensity(float intensity) { this->intensity = juce::jlimit(0.0f, 1.0f, intensity); }
+    void setCentsLow(float cents) { centsLow = juce::jlimit(-50.0f, 0.0f, cents); }
+    void setCentsHigh(float cents) { centsHigh = juce::jlimit(0.0f, 50.0f, cents); }
     void setLFOSpeed(float speed) { lfoSpeed = juce::jlimit(0.0f, 1.0f, speed); }
 
     // Getters for visualizers
     float getLFOPhase() const { return lfoPhase; }
     float getCurrentCents() const { return currentCents; }
     float getTargetCents() const { return targetCents; }
+    float getCentsLow() const { return centsLow; }
+    float getCentsHigh() const { return centsHigh; }
 
 private:
-    float intensity = 0.0f;  // 0-1 maps to 0-100 cents range
+    float centsLow = 0.0f;   // -50 to 0 (flat range)
+    float centsHigh = 0.0f;  // 0 to +50 (sharp range)
     float lfoSpeed = 0.3f;   // LFO speed (0.1 Hz to 5 Hz)
 
     // LFO state

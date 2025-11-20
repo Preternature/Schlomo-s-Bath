@@ -97,8 +97,10 @@ private:
     // Category 1: Human Vocal Randomizers
     // U-Bend section
     juce::Label uBendSectionLabel{"", "U-BEND"};
-    juce::Label pitchDriftLabel{"", "Amount (0-100 cents)"};
-    juce::Slider pitchDriftSlider;
+    juce::Label centsLowLabel{"", "Low (flat)"};
+    juce::Slider centsLowSlider;
+    juce::Label centsHighLabel{"", "High (sharp)"};
+    juce::Slider centsHighSlider;
     juce::Label lfoSpeedLabel{"", "LFO Speed"};
     juce::Slider lfoSpeedSlider;
     LFOVisualizer uBendVisualizer;

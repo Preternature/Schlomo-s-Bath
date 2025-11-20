@@ -66,10 +66,31 @@ SchlomosBathAudioProcessorEditor::SchlomosBathAudioProcessorEditor (SchlomosBath
     uBendSectionLabel.setJustificationType(juce::Justification::centredLeft);
     addAndMakeVisible(uBendSectionLabel);
 
-    setupSlider(pitchDriftSlider, pitchDriftLabel);
-    pitchDriftSlider.onValueChange = [this] {
-        audioProcessor.getVocalProcessor().getPitchDriftBrain().setIntensity((float)pitchDriftSlider.getValue());
+    // Low cents slider (-50 to 0)
+    centsLowLabel.setJustificationType(juce::Justification::centredLeft);
+    centsLowLabel.setColour(juce::Label::textColourId, juce::Colours::white);
+    addAndMakeVisible(centsLowLabel);
+    centsLowSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+    centsLowSlider.setRange(-50.0, 0.0, 1.0);
+    centsLowSlider.setValue(0.0);
+    centsLowSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 40, 20);
+    centsLowSlider.onValueChange = [this] {
+        audioProcessor.getVocalProcessor().getPitchDriftBrain().setCentsLow((float)centsLowSlider.getValue());
     };
+    addAndMakeVisible(centsLowSlider);
+
+    // High cents slider (0 to +50)
+    centsHighLabel.setJustificationType(juce::Justification::centredLeft);
+    centsHighLabel.setColour(juce::Label::textColourId, juce::Colours::white);
+    addAndMakeVisible(centsHighLabel);
+    centsHighSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+    centsHighSlider.setRange(0.0, 50.0, 1.0);
+    centsHighSlider.setValue(0.0);
+    centsHighSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 40, 20);
+    centsHighSlider.onValueChange = [this] {
+        audioProcessor.getVocalProcessor().getPitchDriftBrain().setCentsHigh((float)centsHighSlider.getValue());
+    };
+    addAndMakeVisible(centsHighSlider);
 
     setupSlider(lfoSpeedSlider, lfoSpeedLabel);
     lfoSpeedSlider.setValue(0.3);  // Default to moderate speed
@@ -210,12 +231,14 @@ void SchlomosBathAudioProcessorEditor::resized()
 
     // U-Bend section
     uBendSectionLabel.setBounds(col1.removeFromTop(18));
-    pitchDriftLabel.setBounds(col1.removeFromTop(18));
-    pitchDriftSlider.setBounds(col1.removeFromTop(22));
-    lfoSpeedLabel.setBounds(col1.removeFromTop(18));
-    lfoSpeedSlider.setBounds(col1.removeFromTop(22));
-    uBendVisualizer.setBounds(col1.removeFromTop(50));
-    col1.removeFromTop(8);
+    centsLowLabel.setBounds(col1.removeFromTop(16));
+    centsLowSlider.setBounds(col1.removeFromTop(20));
+    centsHighLabel.setBounds(col1.removeFromTop(16));
+    centsHighSlider.setBounds(col1.removeFromTop(20));
+    lfoSpeedLabel.setBounds(col1.removeFromTop(16));
+    lfoSpeedSlider.setBounds(col1.removeFromTop(20));
+    uBendVisualizer.setBounds(col1.removeFromTop(45));
+    col1.removeFromTop(5);
 
     formantLabel.setBounds(col1.removeFromTop(20));
     formantSlider.setBounds(col1.removeFromTop(25));

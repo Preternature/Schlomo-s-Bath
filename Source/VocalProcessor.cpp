@@ -49,15 +49,12 @@ void PitchDriftBrain::prepare(double sampleRate, int samplesPerBlock)
 
 void PitchDriftBrain::process(juce::AudioBuffer<float>& buffer)
 {
-    // Skip entirely if intensity is 0 (no pitch randomization)
-    if (!enabled || intensity <= 0.0f || shifters.empty())
+    // Skip entirely if no range is set (both at 0)
+    if (!enabled || (centsLow >= 0.0f && centsHigh <= 0.0f) || shifters.empty())
         return;
 
     const int numSamples = buffer.getNumSamples();
     const int bufferChannels = buffer.getNumChannels();
-
-    // intensity = 0 to 1, maps to 0 to 100 cents range
-    float maxCents = intensity * 100.0f;
 
     // LFO frequency: lfoSpeed 0-1 maps to 0.1 Hz to 5 Hz
     float lfoFreqHz = 0.1f + lfoSpeed * 4.9f;
@@ -74,7 +71,9 @@ void PitchDriftBrain::process(juce::AudioBuffer<float>& buffer)
         bool isPositive = lfoValue >= 0.0f;
         if (isPositive != wasPositive)
         {
-            targetCents = (random.nextFloat() * 2.0f - 1.0f) * maxCents;
+            // Pick random target within the low-high range
+            // centsLow is negative (e.g., -50), centsHigh is positive (e.g., +50)
+            targetCents = centsLow + random.nextFloat() * (centsHigh - centsLow);
             wasPositive = isPositive;
         }
         currentCents = currentCents * 0.999f + targetCents * 0.001f;
