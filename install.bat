@@ -5,11 +5,11 @@ echo ================================================
 echo.
 
 set VST3_PATH=C:\Program Files\Common Files\VST3
-set PLUGIN_FILE=build\SchlomosBath_artefacts\Release\VST3\Schlomos Bath.vst3\Contents\x86_64-win\Schlomos Bath.vst3
+set PLUGIN_FOLDER=build\SchlomosBath_artefacts\Release\VST3\Schlomos Bath.vst3
 
-if not exist "%PLUGIN_FILE%" (
+if not exist "%PLUGIN_FOLDER%" (
     echo ERROR: Plugin not found at:
-    echo %PLUGIN_FILE%
+    echo %PLUGIN_FOLDER%
     echo.
     echo Please build the plugin first by running: build.bat
     pause
@@ -22,14 +22,14 @@ echo This requires administrator privileges...
 echo.
 
 REM Remove old version if exists
-if exist "%VST3_PATH%\SchlomosBath.vst3" (
+if exist "%VST3_PATH%\Schlomos Bath.vst3" (
     echo Removing old version...
-    rmdir /s /q "%VST3_PATH%\SchlomosBath.vst3"
+    rmdir /s /q "%VST3_PATH%\Schlomos Bath.vst3"
 )
 
-REM Copy new version
+REM Copy new version (entire bundle folder)
 echo Copying plugin...
-xcopy /E /I /Y "%PLUGIN_FILE%" "%VST3_PATH%\SchlomosBath.vst3"
+xcopy /E /I /Y "%PLUGIN_FOLDER%" "%VST3_PATH%\Schlomos Bath.vst3"
 
 if errorlevel 1 (
     echo.

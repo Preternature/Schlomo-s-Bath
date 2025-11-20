@@ -60,6 +60,12 @@ SchlomosBathAudioProcessorEditor::SchlomosBathAudioProcessorEditor (SchlomosBath
     };
 
     // Category 1: Human Vocal Randomizers
+    // U-Bend section header
+    uBendSectionLabel.setFont(juce::Font(12.0f, juce::Font::bold));
+    uBendSectionLabel.setColour(juce::Label::textColourId, juce::Colour(0xffff6600));
+    uBendSectionLabel.setJustificationType(juce::Justification::centredLeft);
+    addAndMakeVisible(uBendSectionLabel);
+
     setupSlider(pitchDriftSlider, pitchDriftLabel);
     pitchDriftSlider.onValueChange = [this] {
         audioProcessor.getVocalProcessor().getPitchDriftBrain().setIntensity((float)pitchDriftSlider.getValue());
@@ -70,6 +76,12 @@ SchlomosBathAudioProcessorEditor::SchlomosBathAudioProcessorEditor (SchlomosBath
     lfoSpeedSlider.onValueChange = [this] {
         audioProcessor.getVocalProcessor().getPitchDriftBrain().setLFOSpeed((float)lfoSpeedSlider.getValue());
     };
+
+    // U-Bend LFO Visualizer
+    addAndMakeVisible(uBendVisualizer);
+
+    // Start timer for visualizer updates (30 FPS)
+    startTimerHz(30);
 
     setupSlider(formantSlider, formantLabel);
     formantSlider.onValueChange = [this] {
@@ -121,6 +133,15 @@ SchlomosBathAudioProcessorEditor::SchlomosBathAudioProcessorEditor (SchlomosBath
 
 SchlomosBathAudioProcessorEditor::~SchlomosBathAudioProcessorEditor()
 {
+    stopTimer();
+}
+
+void SchlomosBathAudioProcessorEditor::timerCallback()
+{
+    // Update U-Bend LFO visualizer
+    auto& pitchBrain = audioProcessor.getVocalProcessor().getPitchDriftBrain();
+    uBendVisualizer.setPhase(pitchBrain.getLFOPhase());
+    uBendVisualizer.setCurrentValue(pitchBrain.getCurrentCents());
 }
 
 //==============================================================================
@@ -187,12 +208,14 @@ void SchlomosBathAudioProcessorEditor::resized()
     auto col1 = moduleArea.removeFromLeft(250).reduced(5);
     col1.removeFromTop(25); // Header space
 
-    pitchDriftLabel.setBounds(col1.removeFromTop(20));
-    pitchDriftSlider.setBounds(col1.removeFromTop(25));
-
-    lfoSpeedLabel.setBounds(col1.removeFromTop(20));
-    lfoSpeedSlider.setBounds(col1.removeFromTop(25));
-    col1.removeFromTop(5);
+    // U-Bend section
+    uBendSectionLabel.setBounds(col1.removeFromTop(18));
+    pitchDriftLabel.setBounds(col1.removeFromTop(18));
+    pitchDriftSlider.setBounds(col1.removeFromTop(22));
+    lfoSpeedLabel.setBounds(col1.removeFromTop(18));
+    lfoSpeedSlider.setBounds(col1.removeFromTop(22));
+    uBendVisualizer.setBounds(col1.removeFromTop(50));
+    col1.removeFromTop(8);
 
     formantLabel.setBounds(col1.removeFromTop(20));
     formantSlider.setBounds(col1.removeFromTop(25));

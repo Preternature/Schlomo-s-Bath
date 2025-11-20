@@ -67,6 +67,11 @@ public:
     void setIntensity(float intensity) { this->intensity = juce::jlimit(0.0f, 1.0f, intensity); }
     void setLFOSpeed(float speed) { lfoSpeed = juce::jlimit(0.0f, 1.0f, speed); }
 
+    // Getters for visualizers
+    float getLFOPhase() const { return lfoPhase; }
+    float getCurrentCents() const { return currentCents; }
+    float getTargetCents() const { return targetCents; }
+
 private:
     float intensity = 0.0f;  // 0-1 maps to 0-100 cents range
     float lfoSpeed = 0.3f;   // LFO speed (0.1 Hz to 5 Hz)

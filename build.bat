@@ -61,7 +61,7 @@ echo Build successful!
 echo ================================================
 echo.
 echo Your VST3 plugin is at:
-echo %cd%\SchlomosBath_artefacts\Release\VST3\SchlomosBath.vst3
+echo %cd%\SchlomosBath_artefacts\Release\VST3\Schlomos Bath.vst3
 echo.
 echo To install, copy the .vst3 file to:
 echo C:\Program Files\Common Files\VST3\
