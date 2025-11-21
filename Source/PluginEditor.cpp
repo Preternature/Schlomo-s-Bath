@@ -71,7 +71,7 @@ SchlomosBathAudioProcessorEditor::SchlomosBathAudioProcessorEditor (SchlomosBath
     centsLowLabel.setColour(juce::Label::textColourId, juce::Colours::white);
     addAndMakeVisible(centsLowLabel);
     centsLowSlider.setSliderStyle(juce::Slider::LinearHorizontal);
-    centsLowSlider.setRange(-50.0, 0.0, 1.0);
+    centsLowSlider.setRange(-150.0, 0.0, 1.0);
     centsLowSlider.setValue(0.0);
     centsLowSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 40, 20);
     centsLowSlider.onValueChange = [this] {
@@ -84,7 +84,7 @@ SchlomosBathAudioProcessorEditor::SchlomosBathAudioProcessorEditor (SchlomosBath
     centsHighLabel.setColour(juce::Label::textColourId, juce::Colours::white);
     addAndMakeVisible(centsHighLabel);
     centsHighSlider.setSliderStyle(juce::Slider::LinearHorizontal);
-    centsHighSlider.setRange(0.0, 50.0, 1.0);
+    centsHighSlider.setRange(0.0, 150.0, 1.0);
     centsHighSlider.setValue(0.0);
     centsHighSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 40, 20);
     centsHighSlider.onValueChange = [this] {
@@ -113,10 +113,56 @@ SchlomosBathAudioProcessorEditor::SchlomosBathAudioProcessorEditor (SchlomosBath
     // Start timer for visualizer updates (30 FPS)
     startTimerHz(30);
 
-    setupSlider(formantSlider, formantLabel);
-    formantSlider.onValueChange = [this] {
-        audioProcessor.getVocalProcessor().getFormantWhispers().setMouthWobble((float)formantSlider.getValue());
+    // Formant section
+    formantSectionLabel.setFont(juce::Font(12.0f, juce::Font::bold));
+    formantSectionLabel.setColour(juce::Label::textColourId, juce::Colour(0xffff6600));
+    formantSectionLabel.setJustificationType(juce::Justification::centredLeft);
+    addAndMakeVisible(formantSectionLabel);
+
+    // Formant low slider (-1 to 0)
+    formantLowLabel.setJustificationType(juce::Justification::centredLeft);
+    formantLowLabel.setColour(juce::Label::textColourId, juce::Colours::white);
+    addAndMakeVisible(formantLowLabel);
+    formantLowSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+    formantLowSlider.setRange(-5.0, 0.0, 0.01);
+    formantLowSlider.setValue(0.0);
+    formantLowSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 40, 20);
+    formantLowSlider.onValueChange = [this] {
+        audioProcessor.getVocalProcessor().getFormantWhispers().setFormantShiftLow((float)formantLowSlider.getValue());
     };
+    addAndMakeVisible(formantLowSlider);
+
+    // Formant high slider (0 to +1)
+    formantHighLabel.setJustificationType(juce::Justification::centredLeft);
+    formantHighLabel.setColour(juce::Label::textColourId, juce::Colours::white);
+    addAndMakeVisible(formantHighLabel);
+    formantHighSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+    formantHighSlider.setRange(0.0, 5.0, 0.01);
+    formantHighSlider.setValue(0.0);
+    formantHighSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 40, 20);
+    formantHighSlider.onValueChange = [this] {
+        audioProcessor.getVocalProcessor().getFormantWhispers().setFormantShiftHigh((float)formantHighSlider.getValue());
+    };
+    addAndMakeVisible(formantHighSlider);
+
+    // Formant LFO speed
+    setupSlider(formantLFOSpeedSlider, formantLFOSpeedLabel);
+    formantLFOSpeedSlider.setValue(0.3);
+    formantLFOSpeedSlider.onValueChange = [this] {
+        audioProcessor.getVocalProcessor().getFormantWhispers().setFormantLFOSpeed((float)formantLFOSpeedSlider.getValue());
+    };
+
+    // Formant randomize toggle
+    formantRandomizeModeToggle.setToggleState(true, juce::dontSendNotification);
+    formantRandomizeModeToggle.setColour(juce::ToggleButton::textColourId, juce::Colours::white);
+    formantRandomizeModeToggle.setColour(juce::ToggleButton::tickColourId, juce::Colour(0xffff6600));
+    formantRandomizeModeToggle.onClick = [this] {
+        audioProcessor.getVocalProcessor().getFormantWhispers().setFormantRandomizeMode(formantRandomizeModeToggle.getToggleState());
+    };
+    addAndMakeVisible(formantRandomizeModeToggle);
+
+    // Formant LFO visualizer
+    addAndMakeVisible(formantVisualizer);
 
     setupSlider(breathSlider, breathLabel);
     breathSlider.onValueChange = [this] {
@@ -172,6 +218,11 @@ void SchlomosBathAudioProcessorEditor::timerCallback()
     auto& pitchBrain = audioProcessor.getVocalProcessor().getPitchDriftBrain();
     uBendVisualizer.setPhase(pitchBrain.getLFOPhase());
     uBendVisualizer.setCurrentValue(pitchBrain.getCurrentCents());
+
+    // Update Formant LFO visualizer
+    auto& formantWhispers = audioProcessor.getVocalProcessor().getFormantWhispers();
+    formantVisualizer.setPhase(formantWhispers.getFormantLFOPhase());
+    formantVisualizer.setCurrentValue(formantWhispers.getCurrentFormantShift() * 100.0f);  // Scale for display
 }
 
 //==============================================================================
@@ -232,7 +283,7 @@ void SchlomosBathAudioProcessorEditor::resized()
     area.removeFromTop(20);
 
     // Module sliders - 3 columns
-    auto moduleArea = area.removeFromTop(400);
+    auto moduleArea = area.removeFromTop(500);
 
     // Column 1: Human Vocal (left)
     auto col1 = moduleArea.removeFromLeft(250).reduced(5);
@@ -247,27 +298,35 @@ void SchlomosBathAudioProcessorEditor::resized()
     lfoSpeedLabel.setBounds(col1.removeFromTop(16));
     lfoSpeedSlider.setBounds(col1.removeFromTop(20));
     randomizeModeToggle.setBounds(col1.removeFromTop(20));
-    uBendVisualizer.setBounds(col1.removeFromTop(45));
+    uBendVisualizer.setBounds(col1.removeFromTop(40));
     col1.removeFromTop(5);
 
-    formantLabel.setBounds(col1.removeFromTop(20));
-    formantSlider.setBounds(col1.removeFromTop(25));
-    col1.removeFromTop(5);
-
-    breathLabel.setBounds(col1.removeFromTop(20));
-    breathSlider.setBounds(col1.removeFromTop(25));
-    col1.removeFromTop(5);
-
-    timingLabel.setBounds(col1.removeFromTop(20));
-    timingSlider.setBounds(col1.removeFromTop(25));
-    col1.removeFromTop(5);
-
-    volumeLabel.setBounds(col1.removeFromTop(20));
-    volumeSlider.setBounds(col1.removeFromTop(25));
+    // Formant section
+    formantSectionLabel.setBounds(col1.removeFromTop(18));
+    formantLowLabel.setBounds(col1.removeFromTop(16));
+    formantLowSlider.setBounds(col1.removeFromTop(20));
+    formantHighLabel.setBounds(col1.removeFromTop(16));
+    formantHighSlider.setBounds(col1.removeFromTop(20));
+    formantLFOSpeedLabel.setBounds(col1.removeFromTop(16));
+    formantLFOSpeedSlider.setBounds(col1.removeFromTop(20));
+    formantRandomizeModeToggle.setBounds(col1.removeFromTop(20));
+    formantVisualizer.setBounds(col1.removeFromTop(40));
 
     // Column 2: Environment (middle)
     auto col2 = moduleArea.removeFromLeft(250).reduced(5);
     col2.removeFromTop(25); // Header space
+
+    breathLabel.setBounds(col2.removeFromTop(20));
+    breathSlider.setBounds(col2.removeFromTop(25));
+    col2.removeFromTop(5);
+
+    timingLabel.setBounds(col2.removeFromTop(20));
+    timingSlider.setBounds(col2.removeFromTop(25));
+    col2.removeFromTop(5);
+
+    volumeLabel.setBounds(col2.removeFromTop(20));
+    volumeSlider.setBounds(col2.removeFromTop(25));
+    col2.removeFromTop(10);
 
     porcelainLabel.setBounds(col2.removeFromTop(20));
     porcelainSlider.setBounds(col2.removeFromTop(25));

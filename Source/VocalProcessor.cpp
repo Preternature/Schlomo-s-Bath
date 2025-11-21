@@ -213,95 +213,180 @@ void FormantWhispers::prepare(double sampleRate, int samplesPerBlock)
 {
     currentSampleRate = sampleRate;
     currentBlockSize = samplesPerBlock;
+    numChannels = 2;  // Prepare for stereo
 
-    juce::dsp::ProcessSpec spec{sampleRate, (juce::uint32)samplesPerBlock, 1};
-    formantFilters.prepare(spec);
-    formantFilters.reset();
+    // Clear existing shifters
+    shifters.clear();
+    inputBuffers.clear();
+    outputBuffers.clear();
+    outputFIFOs.clear();
+    inputPos.clear();
+    outputPos.clear();
+    outputAvailable.clear();
+
+    // Create one RubberBand shifter per channel
+    // Using OptionFormantPreserved to allow independent formant control
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
+        shifters.push_back(std::make_unique<RubberBand::RubberBandLiveShifter>(
+            (size_t)sampleRate,
+            1,  // mono per channel
+            RubberBand::RubberBandLiveShifter::OptionWindowShort
+        ));
+    }
+
+    rbBlockSize = shifters[0]->getBlockSize();
+
+    // Allocate buffers for each channel
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
+        inputBuffers.push_back(std::vector<float>(rbBlockSize, 0.0f));
+        outputBuffers.push_back(std::vector<float>(rbBlockSize, 0.0f));
+        outputFIFOs.push_back(std::vector<float>(rbBlockSize * 4, 0.0f));
+        inputPos.push_back(0);
+        outputPos.push_back(0);
+        outputAvailable.push_back(0);
+    }
 }
 
 void FormantWhispers::process(juce::AudioBuffer<float>& buffer)
 {
-    if (!enabled || mouthWobble <= 0.0f)
+    // Skip if no range is set or not enabled
+    if (!enabled || (formantShiftLow >= 0.0f && formantShiftHigh <= 0.0f) || shifters.empty())
         return;
 
     const int numSamples = buffer.getNumSamples();
+    const int bufferChannels = buffer.getNumChannels();
 
-    // Formant frequencies for vowels (approximate)
-    // F1, F2, F3 for "ah" sound: ~800, 1200, 2800 Hz
-    // We'll randomly shift these around
+    // LFO frequency: formantLFOSpeed 0-1 maps to 0.1 Hz to 5 Hz
+    float lfoFreqHz = 0.1f + formantLFOSpeed * 4.9f;
+    float lfoIncrement = lfoFreqHz / (float)currentSampleRate;
 
-    static float f1 = 800.0f;
-    static float f2 = 1200.0f;
-    static float f3 = 2800.0f;
-    static float targetF1 = 800.0f;
-    static float targetF2 = 1200.0f;
-    static float targetF3 = 2800.0f;
-
-    // Slowly modulate formant targets
-    static int updateCounter = 0;
-    if (++updateCounter > 512)
+    // Update LFO and formant target
+    for (int i = 0; i < numSamples; ++i)
     {
-        updateCounter = 0;
+        formantLFOPhase += lfoIncrement;
+        if (formantLFOPhase >= 1.0f)
+            formantLFOPhase -= 1.0f;
 
-        // Random formant shifts based on parameters
-        float shift = (random.nextFloat() - 0.5f) * mouthWobble * 400.0f;
-        targetF1 = juce::jlimit(300.0f, 1000.0f, 800.0f + shift + throatShift * 200.0f);
+        float lfoValue = std::sin(formantLFOPhase * juce::MathConstants<float>::twoPi);
 
-        shift = (random.nextFloat() - 0.5f) * mouthWobble * 600.0f;
-        targetF2 = juce::jlimit(800.0f, 2500.0f, 1200.0f + shift);
+        // Detect zero crossings to update targets
+        bool isPositive = lfoValue >= 0.0f;
+        if (isPositive != formantWasPositive)
+        {
+            previousFormantShift = targetFormantShift;
+            bool headingToPeak = isPositive;
 
-        shift = (random.nextFloat() - 0.5f) * mouthWobble * 800.0f;
-        targetF3 = juce::jlimit(2000.0f, 4000.0f, 2800.0f + shift - nasalization * 500.0f);
+            if (formantRandomizeMode)
+            {
+                targetFormantShift = formantShiftLow + random.nextFloat() * (formantShiftHigh - formantShiftLow);
+            }
+            else
+            {
+                if (headingToPeak)
+                    targetFormantShift = formantShiftHigh;
+                else
+                    targetFormantShift = formantShiftLow;
+            }
+
+            formantWasPositive = isPositive;
+        }
+
+        // Ease between previous and target using LFO position
+        float t = (lfoValue + 1.0f) * 0.5f;
+        if (formantWasPositive)
+            currentFormantShift = previousFormantShift + (targetFormantShift - previousFormantShift) * t;
+        else
+            currentFormantShift = previousFormantShift + (targetFormantShift - previousFormantShift) * (1.0f - t);
     }
 
-    // Smooth formant movement
-    f1 = f1 * 0.99f + targetF1 * 0.01f;
-    f2 = f2 * 0.99f + targetF2 * 0.01f;
-    f3 = f3 * 0.99f + targetF3 * 0.01f;
+    // Convert formant shift to scale
+    // formantShift of -1 = formants shifted down (bigger character)
+    // formantShift of +1 = formants shifted up (smaller character)
+    // We use setFormantScale - values > 1 shift formants up, < 1 shift down
+    // Map -1..+1 to 0.5..2.0
+    double formantScale = std::pow(2.0, currentFormantShift);
 
-    // Update formant filter coefficients
-    auto& filter1 = formantFilters.template get<0>();
-    auto& filter2 = formantFilters.template get<1>();
-    auto& filter3 = formantFilters.template get<2>();
-
-    auto coeff1 = juce::dsp::IIR::Coefficients<float>::makeBandPass(currentSampleRate, f1, 5.0f);
-    auto coeff2 = juce::dsp::IIR::Coefficients<float>::makeBandPass(currentSampleRate, f2, 5.0f);
-    auto coeff3 = juce::dsp::IIR::Coefficients<float>::makeBandPass(currentSampleRate, f3, 5.0f);
-
-    *filter1.coefficients = *coeff1;
-    *filter2.coefficients = *coeff2;
-    *filter3.coefficients = *coeff3;
-
-    for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+    // Process each channel independently
+    for (int channel = 0; channel < bufferChannels && channel < numChannels; ++channel)
     {
         auto* channelData = buffer.getWritePointer(channel);
+        auto& shifter = shifters[channel];
+        auto& inputBuf = inputBuffers[channel];
+        auto& outputBuf = outputBuffers[channel];
+        auto& outputFIFO = outputFIFOs[channel];
+        size_t& inPos = inputPos[channel];
+        size_t& outPos = outputPos[channel];
+        size_t& outAvail = outputAvailable[channel];
+
+        // Set pitch to 1.0 (no pitch change) but shift formants
+        shifter->setPitchScale(1.0);
+        shifter->setFormantScale(formantScale);
 
         for (int sample = 0; sample < numSamples; ++sample)
         {
-            float input = channelData[sample];
+            // Add input sample to buffer
+            inputBuf[inPos] = channelData[sample];
+            inPos++;
 
-            // Apply formant filters and sum
-            float formant1 = filter1.processSample(input) * 0.4f;
-            float formant2 = filter2.processSample(input) * 0.35f;
-            float formant3 = filter3.processSample(input) * 0.25f;
-
-            float formantSignal = formant1 + formant2 + formant3;
-
-            // Add nasalization (boost around 2500 Hz nasal resonance)
-            if (nasalization > 0.0f)
+            // When input buffer is full, process with RubberBand
+            if (inPos >= rbBlockSize)
             {
-                formantSignal *= (1.0f + nasalization * 0.3f);
+                const float* inPtr = inputBuf.data();
+                float* outPtr = outputBuf.data();
+                shifter->shift(&inPtr, &outPtr);
+
+                // Copy output to FIFO
+                size_t fifoSize = outputFIFO.size();
+                size_t writePos = (outPos + outAvail) % fifoSize;
+                for (size_t i = 0; i < rbBlockSize; ++i)
+                {
+                    outputFIFO[(writePos + i) % fifoSize] = outputBuf[i];
+                }
+                outAvail += rbBlockSize;
+
+                inPos = 0;
             }
 
-            // Mix
-            channelData[sample] = input * (1.0f - mix) + (input + formantSignal) * mix;
+            // Read from output FIFO if samples are available
+            if (outAvail > 0)
+            {
+                channelData[sample] = outputFIFO[outPos];
+                outPos = (outPos + 1) % outputFIFO.size();
+                outAvail--;
+            }
         }
     }
 }
 
 void FormantWhispers::reset()
 {
-    formantFilters.reset();
+    for (auto& shifter : shifters)
+    {
+        if (shifter)
+            shifter->reset();
+    }
+
+    for (auto& buf : inputBuffers)
+        std::fill(buf.begin(), buf.end(), 0.0f);
+    for (auto& buf : outputBuffers)
+        std::fill(buf.begin(), buf.end(), 0.0f);
+    for (auto& fifo : outputFIFOs)
+        std::fill(fifo.begin(), fifo.end(), 0.0f);
+
+    for (size_t i = 0; i < inputPos.size(); ++i)
+    {
+        inputPos[i] = 0;
+        outputPos[i] = 0;
+        outputAvailable[i] = 0;
+    }
+
+    formantLFOPhase = 0.0f;
+    formantWasPositive = true;
+    currentFormantShift = 0.0f;
+    targetFormantShift = 0.0f;
+    previousFormantShift = 0.0f;
 }
 
 //==============================================================================

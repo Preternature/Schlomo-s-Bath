@@ -64,8 +64,8 @@ public:
         AnxietyMode
     };
 
-    void setCentsLow(float cents) { centsLow = juce::jlimit(-50.0f, 0.0f, cents); }
-    void setCentsHigh(float cents) { centsHigh = juce::jlimit(0.0f, 50.0f, cents); }
+    void setCentsLow(float cents) { centsLow = juce::jlimit(-150.0f, 0.0f, cents); }
+    void setCentsHigh(float cents) { centsHigh = juce::jlimit(0.0f, 150.0f, cents); }
     void setLFOSpeed(float speed) { lfoSpeed = juce::jlimit(0.0f, 1.0f, speed); }
     void setRandomizeMode(bool randomize) { randomizeMode = randomize; }
 
@@ -109,7 +109,7 @@ private:
 
 //==============================================================================
 // 2. Formant Whispers
-// Random low-level formant shifts (nasalization, throat resonance, etc.)
+// LFO-based formant shifting using RubberBand
 class FormantWhispers : public VocalModule
 {
 public:
@@ -120,19 +120,43 @@ public:
     void reset() override;
     juce::String getName() const override { return "Formant Whispers"; }
 
-    void setNasalization(float amount) { nasalization = juce::jlimit(0.0f, 1.0f, amount); }
-    void setThroatShift(float amount) { throatShift = juce::jlimit(-1.0f, 1.0f, amount); }
-    void setMouthWobble(float amount) { mouthWobble = juce::jlimit(0.0f, 1.0f, amount); }
+    void setFormantShiftLow(float shift) { formantShiftLow = juce::jlimit(-5.0f, 0.0f, shift); }
+    void setFormantShiftHigh(float shift) { formantShiftHigh = juce::jlimit(0.0f, 5.0f, shift); }
+    void setFormantLFOSpeed(float speed) { formantLFOSpeed = juce::jlimit(0.0f, 1.0f, speed); }
+    void setFormantRandomizeMode(bool randomize) { formantRandomizeMode = randomize; }
+
+    // Getters for visualizers
+    float getFormantLFOPhase() const { return formantLFOPhase; }
+    float getCurrentFormantShift() const { return currentFormantShift; }
+    float getFormantShiftLow() const { return formantShiftLow; }
+    float getFormantShiftHigh() const { return formantShiftHigh; }
+    bool isFormantRandomizeMode() const { return formantRandomizeMode; }
 
 private:
-    float nasalization = 0.0f;
-    float throatShift = 0.0f;
-    float mouthWobble = 0.0f;
+    // LFO-based formant shifting
+    float formantShiftLow = 0.0f;    // -1.0 to 0 (shift down)
+    float formantShiftHigh = 0.0f;   // 0 to 1.0 (shift up)
+    float formantLFOSpeed = 0.3f;    // LFO speed
+    bool formantRandomizeMode = true;
 
-    // Formant filter banks
-    juce::dsp::ProcessorChain<juce::dsp::IIR::Filter<float>,
-                              juce::dsp::IIR::Filter<float>,
-                              juce::dsp::IIR::Filter<float>> formantFilters;
+    // LFO state
+    float formantLFOPhase = 0.0f;
+    bool formantWasPositive = true;
+    float currentFormantShift = 0.0f;
+    float targetFormantShift = 0.0f;
+    float previousFormantShift = 0.0f;
+
+    // RubberBand for formant shifting (one per channel)
+    std::vector<std::unique_ptr<RubberBand::RubberBandLiveShifter>> shifters;
+    std::vector<std::vector<float>> inputBuffers;
+    std::vector<std::vector<float>> outputBuffers;
+    std::vector<std::vector<float>> outputFIFOs;
+    std::vector<size_t> inputPos;
+    std::vector<size_t> outputPos;
+    std::vector<size_t> outputAvailable;
+    size_t rbBlockSize = 0;
+    int numChannels = 0;
+
     juce::Random random;
 };
 

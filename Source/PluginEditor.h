@@ -105,8 +105,17 @@ private:
     juce::Slider lfoSpeedSlider;
     juce::ToggleButton randomizeModeToggle{"Randomize"};
     LFOVisualizer uBendVisualizer;
-    juce::Label formantLabel{"", "Formant Wobble"};
-    juce::Slider formantSlider;
+
+    // Formant section
+    juce::Label formantSectionLabel{"", "FORMANT"};
+    juce::Label formantLowLabel{"", "Low (down)"};
+    juce::Slider formantLowSlider;
+    juce::Label formantHighLabel{"", "High (up)"};
+    juce::Slider formantHighSlider;
+    juce::Label formantLFOSpeedLabel{"", "LFO Speed"};
+    juce::Slider formantLFOSpeedSlider;
+    juce::ToggleButton formantRandomizeModeToggle{"Randomize"};
+    LFOVisualizer formantVisualizer;
     juce::Label breathLabel{"", "Breath Noise"};
     juce::Slider breathSlider;
     juce::Label timingLabel{"", "Timing Wobble"};
