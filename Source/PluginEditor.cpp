@@ -98,6 +98,15 @@ SchlomosBathAudioProcessorEditor::SchlomosBathAudioProcessorEditor (SchlomosBath
         audioProcessor.getVocalProcessor().getPitchDriftBrain().setLFOSpeed((float)lfoSpeedSlider.getValue());
     };
 
+    // Randomize mode toggle (randomize vs high/low)
+    randomizeModeToggle.setToggleState(true, juce::dontSendNotification);  // Default to randomize
+    randomizeModeToggle.setColour(juce::ToggleButton::textColourId, juce::Colours::white);
+    randomizeModeToggle.setColour(juce::ToggleButton::tickColourId, juce::Colour(0xffff6600));
+    randomizeModeToggle.onClick = [this] {
+        audioProcessor.getVocalProcessor().getPitchDriftBrain().setRandomizeMode(randomizeModeToggle.getToggleState());
+    };
+    addAndMakeVisible(randomizeModeToggle);
+
     // U-Bend LFO Visualizer
     addAndMakeVisible(uBendVisualizer);
 
@@ -237,6 +246,7 @@ void SchlomosBathAudioProcessorEditor::resized()
     centsHighSlider.setBounds(col1.removeFromTop(20));
     lfoSpeedLabel.setBounds(col1.removeFromTop(16));
     lfoSpeedSlider.setBounds(col1.removeFromTop(20));
+    randomizeModeToggle.setBounds(col1.removeFromTop(20));
     uBendVisualizer.setBounds(col1.removeFromTop(45));
     col1.removeFromTop(5);
 

@@ -67,6 +67,7 @@ public:
     void setCentsLow(float cents) { centsLow = juce::jlimit(-50.0f, 0.0f, cents); }
     void setCentsHigh(float cents) { centsHigh = juce::jlimit(0.0f, 50.0f, cents); }
     void setLFOSpeed(float speed) { lfoSpeed = juce::jlimit(0.0f, 1.0f, speed); }
+    void setRandomizeMode(bool randomize) { randomizeMode = randomize; }
 
     // Getters for visualizers
     float getLFOPhase() const { return lfoPhase; }
@@ -74,19 +75,23 @@ public:
     float getTargetCents() const { return targetCents; }
     float getCentsLow() const { return centsLow; }
     float getCentsHigh() const { return centsHigh; }
+    bool isRandomizeMode() const { return randomizeMode; }
 
 private:
     float centsLow = 0.0f;   // -50 to 0 (flat range)
     float centsHigh = 0.0f;  // 0 to +50 (sharp range)
     float lfoSpeed = 0.3f;   // LFO speed (0.1 Hz to 5 Hz)
+    bool randomizeMode = true;  // true = random targets, false = high/low mode
 
     // LFO state
     float lfoPhase = 0.0f;
     bool wasPositive = true;  // Track LFO zero crossings
+    bool wasPeak = false;     // Track peaks vs valleys
 
     // Pitch state
     float currentCents = 0.0f;   // Current detuning in cents
-    float targetCents = 0.0f;    // Target detuning (picked at LFO peaks/valleys)
+    float targetCents = 0.0f;    // Target detuning at next peak/valley
+    float previousCents = 0.0f;  // Previous target (for interpolation)
 
     // RubberBand pitch shifter (one per channel for stereo)
     std::vector<std::unique_ptr<RubberBand::RubberBandLiveShifter>> shifters;

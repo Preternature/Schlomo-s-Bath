@@ -68,15 +68,53 @@ void PitchDriftBrain::process(juce::AudioBuffer<float>& buffer)
             lfoPhase -= 1.0f;
 
         float lfoValue = std::sin(lfoPhase * juce::MathConstants<float>::twoPi);
+
+        // Detect peaks and valleys to update targets
         bool isPositive = lfoValue >= 0.0f;
         if (isPositive != wasPositive)
         {
-            // Pick random target within the low-high range
-            // centsLow is negative (e.g., -50), centsHigh is positive (e.g., +50)
-            targetCents = centsLow + random.nextFloat() * (centsHigh - centsLow);
+            // We've crossed zero - save current target as previous
+            previousCents = targetCents;
+
+            // Determine if we're heading to a peak (positive half) or valley (negative half)
+            bool headingToPeak = isPositive;
+
+            if (randomizeMode)
+            {
+                // Random mode: pick random target within range
+                targetCents = centsLow + random.nextFloat() * (centsHigh - centsLow);
+            }
+            else
+            {
+                // High/Low mode: use exact slider values
+                if (headingToPeak)
+                    targetCents = centsHigh;  // Peak = sharp (high)
+                else
+                    targetCents = centsLow;   // Valley = flat (low)
+            }
+
             wasPositive = isPositive;
         }
-        currentCents = currentCents * 0.999f + targetCents * 0.001f;
+
+        // Use the LFO waveform to ease between previous and target
+        // Map LFO from -1..+1 to 0..1 for interpolation
+        float t = (lfoValue + 1.0f) * 0.5f;
+
+        // In positive half (0.5 to 1.0), we're easing toward target
+        // In negative half (0.0 to 0.5), we're also easing toward target but from other side
+        // So we use absolute position within the current half-cycle
+        if (wasPositive)
+        {
+            // In positive half: t goes from 0.5 to 1.0 (peak) and back to 0.5
+            // Remap so we smoothly interpolate from previous to target
+            currentCents = previousCents + (targetCents - previousCents) * t;
+        }
+        else
+        {
+            // In negative half: t goes from 0.5 to 0.0 (valley) and back to 0.5
+            // Invert t so we interpolate correctly
+            currentCents = previousCents + (targetCents - previousCents) * (1.0f - t);
+        }
     }
 
     // Convert cents to pitch scale: scale = 2^(cents/1200)
@@ -159,7 +197,9 @@ void PitchDriftBrain::reset()
     lfoPhase = 0.0f;
     currentCents = 0.0f;
     targetCents = 0.0f;
+    previousCents = 0.0f;
     wasPositive = true;
+    wasPeak = false;
 }
 
 //==============================================================================

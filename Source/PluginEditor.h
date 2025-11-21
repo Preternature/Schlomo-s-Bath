@@ -103,6 +103,7 @@ private:
     juce::Slider centsHighSlider;
     juce::Label lfoSpeedLabel{"", "LFO Speed"};
     juce::Slider lfoSpeedSlider;
+    juce::ToggleButton randomizeModeToggle{"Randomize"};
     LFOVisualizer uBendVisualizer;
     juce::Label formantLabel{"", "Formant Wobble"};
     juce::Slider formantSlider;
